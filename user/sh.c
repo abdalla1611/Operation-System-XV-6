@@ -3,11 +3,6 @@
 #include "kernel/types.h"
 #include "user/user.h"
 #include "kernel/fcntl.h"
-
-
-
-
-
 // Parsed command representation
 #define EXEC  1
 #define REDIR 2
@@ -76,13 +71,49 @@ runcmd(struct cmd *cmd)
     panic("runcmd");
 
   case EXEC:
+    int fd ;
     ecmd = (struct execcmd*)cmd;
-    if(ecmd->argv[0] == 0)
+
+    if(ecmd->argv[0]==0){
       exit(1);
-    exec(ecmd->argv[0], ecmd->argv);
+    }
+    if(fd=open(ecmd->argv[0],O_RDONLY)>= 0){
+      close(fd);
+      exec(ecmd->argv[0],ecmd->argv);
+    }
+    char buffer[1024]={0}; 
+    char path[1024]={0}; 
+    int readnum;
+    fd = open("/path", O_RDWR | O_CREATE); 
+    readnum=read(fd,buffer,1024);
+    if(readnum==0){
+      write(fd,"/:/user/:",9);
+      close(fd);
+      fd = open("/path", O_RDWR | O_CREATE); 
+      readnum=read(fd,buffer,1024);
+    }
+        int i,k;
+    while(readnum>0){
+    for(i = 0; (i<1024 && buffer[i]=='\0'); i++) {
+          int j=0;
+      while(j<1024 && (buffer[i]!=':')&& (buffer[i]!='\0')){
+        path[j] = buffer[i]; 
+        j++;
+        i++;
+      }
+      for(k=0 ; ecmd->argv[0][k]!='\0' ; k++,j++){
+        path[j] = ecmd->argv[0][k];
+      }
+      path[j]='\0';
+      if((fd = (open(path,O_RDONLY))) >= 0){ //check if found in this directory
+        close(fd);
+      exec(path , ecmd->argv);
+      }
+    }
+    readnum=read(fd,buffer,1024);
+    }
     fprintf(2, "exec %s failed\n", ecmd->argv[0]);
     break;
-
   case REDIR:
     rcmd = (struct redircmd*)cmd;
     close(rcmd->fd);
