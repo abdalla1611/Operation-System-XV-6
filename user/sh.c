@@ -71,16 +71,18 @@ runcmd(struct cmd *cmd)
     panic("runcmd");
 
   case EXEC:
-    int fd ;
     ecmd = (struct execcmd*)cmd;
-
     if(ecmd->argv[0]==0){
       exit(1);
     }
-    if(fd=open(ecmd->argv[0],O_RDONLY)>= 0){
+    //*********************************
+    int fd ;
+    if((fd=open(ecmd->argv[0],O_RDONLY))>= 0){ // checking curr dir
       close(fd);
       exec(ecmd->argv[0],ecmd->argv);
     }
+    // if not exec in the cur dir ...
+
     char buffer[1024]={0}; 
     char path[1024]={0}; 
     int readnum;
@@ -112,8 +114,11 @@ runcmd(struct cmd *cmd)
     }
     readnum=read(fd,buffer,1024);
     }
+    //****************************
+
     fprintf(2, "exec %s failed\n", ecmd->argv[0]);
     break;
+    
   case REDIR:
     rcmd = (struct redircmd*)cmd;
     close(rcmd->fd);
