@@ -18,7 +18,8 @@ sys_trace(void)
   if(argint(1,&pid)<0){
     return -1 ;
   }
-  return trace_fun(mask ,pid);
+ // return trace_fun(mask ,pid);
+  return traceFun(mask,pid) ;
 }
 
 

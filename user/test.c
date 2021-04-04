@@ -2,9 +2,11 @@
 #include "kernel/fcntl.h"
 #include "user/user.h"
 
-int main(int argc ,char** argv ){
+int main(int argc, char **argv)
+{
 
-    fprintf(2,"hello world\n") ;
-
-    return 0 ;
+    fprintf(2, "hello world\n");
+    trace(21, getpid());
+    close(3);
+    return 0;
 }
