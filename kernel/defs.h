@@ -8,6 +8,8 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct perf ;   //new added
+
 
 // bio.c
 void            binit(void);
@@ -106,6 +108,14 @@ int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
 int             traceFun(int ,int);
+int             priorityProc(int);
+int             wait_stat(int* status, struct perf * performance);
+void            updateProcPerf();
+void            schedulerFCFS();
+void            schedulerCFSD();
+void            schedulerSRT();
+
+
 
 // swtch.S
 void            swtch(struct context*, struct context*);

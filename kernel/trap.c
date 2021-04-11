@@ -11,6 +11,8 @@ uint ticks;
 
 extern char trampoline[], uservec[], userret[];
 
+extern void updateProcPerf();
+
 // in kernelvec.S, calls kerneltrap().
 void kernelvec();
 
@@ -77,9 +79,11 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
-    yield();
-
+  #ifndef FCFS 
+  if((which_dev == 2) && (ticks% QUANTUM == 0)){
+      yield();
+  }
+  #endif
   usertrapret();
 }
 
@@ -150,7 +154,7 @@ kerneltrap()
   }
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING)
+  if(which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING && (ticks%QUANTUM == 0))
     yield();
 
   // the yield() may have caused some traps to occur,
@@ -163,7 +167,9 @@ void
 clockintr()
 {
   acquire(&tickslock);
+
   ticks++;
+  updateProcPerf();
   wakeup(&ticks);
   release(&tickslock);
 }

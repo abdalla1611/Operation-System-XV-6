@@ -105,6 +105,8 @@ extern uint64 sys_wait(void);
 extern uint64 sys_write(void);
 extern uint64 sys_uptime(void);
 extern uint64 sys_trace(void);
+extern uint64 sys_wait_stat(void);
+extern uint64 sys_set_priority(void);
 
 
 static uint64 (*syscalls[])(void) = {
@@ -130,8 +132,9 @@ static uint64 (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_trace]   sys_trace,
+[SYS_wait_stat]   sys_wait_stat,
+[SYS_set_priority]  sys_set_priority,
 };
-
 static char* syscallnames[] = {
 [SYS_fork]    "fork",
 [SYS_exit]    "exit",
@@ -155,24 +158,42 @@ static char* syscallnames[] = {
 [SYS_mkdir]   "mkdir",
 [SYS_close]   "close",
 [SYS_trace]   "trace",
+[SYS_wait_stat] "wait_stat",
+[SYS_set_priority]  "set_priority",
 };
+
 
 void
 syscall(void)
 {
   int num;
+  int arg0=0 ;
   struct proc *p = myproc();
-
   num = p->trapframe->a7;
+
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
 
+    if(( p->mask & (1 << num) ) > 0 && ((num==6) || (num==12)) ){
+      arg0=p->trapframe->a7  ;  // kill | sbrk SYScall
+        printf("%d",arg0);
+      }
+
     p->trapframe->a0 = syscalls[num]();
+
   } else {
     printf("%d %s: unknown sys call %d\n",
             p->pid, p->name, num);
     p->trapframe->a0 = -1;
   }
-  if(myproc()->mask){
-      printf("%d  %s",num, syscallnames[num]);
+    if( ( p->mask & (1 << num) ) > 0){
+    if( (num==6) | ( num==12 ) ){
+  printf("%d : syscall, %s, %d,->  %d\n",p->pid,syscallnames[num],arg0,p->trapframe->a0);
+    }
+    else if(num==1){
+      printf("%d : syscall, %s, NULL,->  %d\n",p->pid,syscallnames[num],p->trapframe->a0);
+    }
+    else{
+      printf("%d : syscall, %s -> %d\n",p->pid,syscallnames[num],p->trapframe->a0);
+   }
   }
 }

@@ -6,6 +6,16 @@
 #include "proc.h"
 #include "defs.h"
 
+struct perf
+{
+  int ctime;
+  int ttime;
+  int stime;
+  int retime;
+  int rutime;
+  int average_bursttime; //average of bursstimes in 100ths (so average*100)
+};
+
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
@@ -125,6 +135,15 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->ctime = ticks;
+  p->ttime = 0;
+  p->stime = 0;
+  p->retime = 0;
+  p->rutime = 0;
+  p->average_bursttime = QUANTUM * 100;
+  p->priority = 3;
+  p->currBrust = 0;
+  p->timeStart = 0;
 
   // Allocate a trapframe page.
   if ((p->trapframe = (struct trapframe *)kalloc()) == 0)
@@ -385,6 +404,9 @@ void exit(int status)
   p->state = ZOMBIE;
 
   release(&wait_lock);
+  //our code
+  p->ttime = ticks;
+  //our code
 
   // Jump into the scheduler, never to return.
   sched();
@@ -395,13 +417,13 @@ void exit(int status)
 // Return -1 if this process has no children.
 int traceFun(int mask, int pid)
 {
-  struct proc *p ;
- for (p = proc; p < &proc[NPROC]; p++)
+  struct proc *p;
+  for (p = proc; p < &proc[NPROC]; p++)
   {
     acquire(&p->lock);
     if (p->pid == pid)
     {
-      p->mask=(p->mask) | mask ;
+      p->mask = (p->mask) | mask;
       release(&p->lock);
       return 0;
     }
@@ -409,6 +431,102 @@ int traceFun(int mask, int pid)
   }
   return -1;
 }
+
+//our code
+
+void updateProcPerf()
+{
+  struct proc *p;
+
+  for (p = proc; p < &proc[NPROC]; p++)
+  {
+    acquire(&p->lock);
+
+    if (p->state == RUNNING)
+    {
+      p->rutime++;
+      p->currBrust++;
+    }
+    else if (p->state == SLEEPING)
+    {
+      p->stime++;
+    }
+    else if (p->state == RUNNABLE)
+    {
+      p->retime++;
+    }
+    release(&p->lock);
+  }
+}
+//ourCode
+int priorityProc(int prio)
+{
+
+  myproc()->priority = prio;
+  return 1;
+}
+
+int wait_stat(int *status, struct perf *performance)
+{
+  struct proc *np;
+  int havekids, pid;
+  struct proc *p = myproc();
+
+  acquire(&wait_lock);
+
+  for (;;)
+  {
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for (np = proc; np < &proc[NPROC]; np++)
+    {
+      if (np->parent == p)
+      {
+        // make sure the child isn't still in exit() or swtch().
+        acquire(&np->lock);
+
+        havekids = 1;
+        if (np->state == ZOMBIE)
+        {
+          // Found one.
+          pid = np->pid;
+          if (status != 0 && copyout(p->pagetable, (uint64)status, (char *)&np->xstate,
+                                     sizeof(np->xstate)) < 0)
+          {
+            release(&np->lock);
+            release(&wait_lock);
+            return -1;
+          }
+
+          copyout(p->pagetable, (uint64)&performance->ctime, (char *)&np->ctime, sizeof(np->ctime));
+          copyout(p->pagetable, (uint64)&performance->ttime, (char *)&np->ttime, sizeof(np->ctime));
+          copyout(p->pagetable, (uint64)&performance->stime, (char *)&np->stime, sizeof(np->ctime));
+          copyout(p->pagetable, (uint64)&performance->retime, (char *)&np->retime, sizeof(np->ctime));
+          copyout(p->pagetable, (uint64)&performance->rutime, (char *)&np->rutime, sizeof(np->ctime));
+          copyout(p->pagetable, (uint64)&performance->average_bursttime, (char *)&np->average_bursttime, sizeof(np->ctime));
+
+          freeproc(np);
+          release(&np->lock);
+          release(&wait_lock);
+          return pid;
+        }
+        release(&np->lock);
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if (!havekids || p->killed)
+    {
+      release(&wait_lock);
+      return -1;
+    }
+
+    // Wait for a child to exit.
+    sleep(p, &wait_lock); //DOC: wait-sleep
+  }
+}
+
+//our code
 
 int wait(uint64 addr)
 {
@@ -479,7 +597,7 @@ void scheduler(void)
   {
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
-
+#ifdef DEFUALT
     for (p = proc; p < &proc[NPROC]; p++)
     {
       acquire(&p->lock);
@@ -489,6 +607,9 @@ void scheduler(void)
         // to release its lock and then reacquire it
         // before jumping back to us.
         p->state = RUNNING;
+        /*
+        int timestart = ticks
+        */
         c->proc = p;
         swtch(&c->context, &p->context);
 
@@ -498,7 +619,81 @@ void scheduler(void)
       }
       release(&p->lock);
     }
+#elif FCFS
+    schedulerFCFS();
+#elif SRT
+    schedulerSRT();
+#elif CFSD
+    schedulerCFSD();
+#endif
   }
+}
+void schedulerSRT()
+{
+
+  struct proc *p;
+  struct cpu *c = mycpu();
+  struct proc *minProc = proc;
+  c->proc = 0;
+
+  for (p = proc; p < &proc[NPROC]; p++)
+  {
+    acquire(&p->lock);
+    if (p->state == RUNNABLE)
+    {
+      if (p->average_bursttime < minProc->average_bursttime)
+      {
+        minProc = p;
+      }
+    }
+    release(&p->lock);
+  }
+  minProc->state=RUNNING ;
+  c->proc = minProc;
+  minProc-> timeStart = ticks ;
+  swtch(&c->context, &minProc->context);
+
+  // Process is done running for now.
+  // It should have changed its p->state before coming back.
+  c->proc = 0;
+}
+
+void schedulerCFSD()
+{
+  struct proc *p;
+  struct proc *minProc = proc ;
+  int decay;
+  struct cpu *c = mycpu();
+  double ratio = -1;
+
+  double temp;
+  c->proc = 0;
+  for (p = proc; p < &proc[NPROC]; p++)
+  {
+    acquire(&p->lock);
+    if (p->state == RUNNABLE)
+    {
+      // Switch to chosen process.  It is the process's job
+      // to release its lock and then reacquire it
+      // before jumping back to us.
+      decay = (p->priority == 1) ? 1 : (p->priority == 2) ? 3 : (p->priority == 3) ? 5 : (p->priority == 4) ? 7 : (p->priority == 5) ? 25:0;
+
+      temp = (p->rutime * decay) / (p->rutime + p->stime);
+      if (ratio == -1 || ratio > temp)
+      {
+        minProc = p;
+        ratio = temp;
+      }
+    }
+    release(&p->lock);
+  }
+
+  c->proc = minProc;
+  minProc->state = RUNNING;
+  swtch(&c->context, &minProc->context);
+  // Process is done running for now.
+  // It should have changed its p->state before coming back.
+  c->proc = 0;
 }
 
 // Switch to scheduler.  Must hold only p->lock
@@ -533,6 +728,8 @@ void yield(void)
   struct proc *p = myproc();
   acquire(&p->lock);
   p->state = RUNNABLE;
+  p->currBrust = ticks - p->timeStart ;
+  p->average_bursttime = (ALPHA * (p->currBrust)) + ((100 - ALPHA) * p->average_bursttime / 100);
   sched();
   release(&p->lock);
 }
@@ -574,9 +771,11 @@ void sleep(void *chan, struct spinlock *lk)
   acquire(&p->lock); //DOC: sleeplock1
   release(lk);
 
-  // Go to sleep.
+  // Go to sleep
   p->chan = chan;
   p->state = SLEEPING;
+  p->currBrust = ticks - p->timeStart ;
+  p->average_bursttime = (ALPHA * (p->currBrust)) + ((100 - ALPHA) * p->average_bursttime / 100);
 
   sched();
 

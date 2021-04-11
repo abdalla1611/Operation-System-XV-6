@@ -7,6 +7,17 @@
 #include "spinlock.h"
 #include "proc.h"
 
+uint64
+sys_set_priority(void){
+  int pri ;
+  if(argint(0,&pri)<0){
+    return -1 ;
+  }
+  if( (pri==1) || (pri ==2) || (pri ==3) || (pri ==4) || (pri ==5) ){
+    return priorityProc(pri);
+  }
+  return -1 ;
+}
 
 uint64
 sys_trace(void)
@@ -18,8 +29,21 @@ sys_trace(void)
   if(argint(1,&pid)<0){
     return -1 ;
   }
- // return trace_fun(mask ,pid);
   return traceFun(mask,pid) ;
+}
+
+int
+sys_wait_stat(void){
+  int * status ;
+  struct perf * performance ;
+
+  if(argaddr(0,(void*)&status)<0){
+    return -1 ;
+  }
+  if(argaddr(1,(void*)&performance)<0){
+    return -1 ;
+  }
+  return wait_stat(status, performance) ;
 }
 
 

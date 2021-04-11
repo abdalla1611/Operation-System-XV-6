@@ -61,44 +61,33 @@ struct cmd *parsecmd(char *);
 //extra code
 void execPath(char *cmd, char **ergv)
 {
-  int fd ;
-  char buff[512] = {0};
-  char path[512] = {0};
-  int numread;
-  fd = open("/path", O_RDWR | O_CREATE);
-  numread = read(fd, buff, 512);
-  if (numread == 0)
+  static char buf[2048];
+  int file_path = open("/path", O_RDWR);
+  read(file_path, &buf, 2048);
+  int i = 0;
+  while (buf[i] != 0)
   {
-    write(fd, "/:/bin/:", 8);
-    close(fd);
-    fd = open("/path", O_RDWR | O_CREATE);
-    numread = read(fd, buff, 512);
-  }
-  int i, j, k;
-  while (numread > 0)
-  {
-    for (i = 0; (buff[i] != '\0') && (i < 512); i++)
+
+    char dir[2048];
+    int j = 0;
+    while (buf[i] != 0 && buf[i] != ':')
     {
-      j = 0;
-      while (j < 1024 && (buff[i] != ':') && (buff[i] != '\0'))
-      {
-        path[j] = buff[i];
-        j++;
-        i++;
-      }
-      for (k = 0; cmd[k] != '\0'; k++, j++)
-      {
-        path[j] = cmd[k];
-      }
-      path[j] = '\0';
-      if ((fd = (open(path, O_RDONLY))) >= 0)
-      {
-        close(fd);
-        exec(path, ergv);
-      }
+      dir[j] = buf[i];
+      j++;
+      i++;
     }
-    numread = read(fd, buff, 512);
+
+    int k = 0;
+    for (k = 0; k < strlen(cmd); k++)
+    {
+      dir[j] = cmd[k];
+      j++;
+    }
+    exec(dir, ergv);
+    fprintf(2, "Command : %s \n", dir);
+    i++;
   }
+  close(file_path);
 }
 // Execute cmd.  Never returns.
 void runcmd(struct cmd *cmd)
@@ -198,14 +187,11 @@ int getcmd(char *buf, int nbuf)
 int main(void)
 {
   static char buf[100];
-  int fd, FdPath;
+  int fd;
 
-  if ((FdPath = (open("/path", O_RDONLY))) < 0)
-  {
-    FdPath = open("/path", O_RDWR | O_CREATE);
-    write(FdPath, "/:/user/:", 9);
-  }
-  close(FdPath);
+  int file_path = open("/path", O_CREATE | O_RDWR);
+  write(file_path, "/:/user/:", 9);
+  close(file_path);
 
   // Ensure that three file descriptors are open.
   while ((fd = open("console", O_RDWR)) >= 0)
