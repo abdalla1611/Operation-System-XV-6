@@ -675,12 +675,10 @@ void schedulerCFSD()
     acquire(&p->lock);
     if (p->state == RUNNABLE)
     {
-      printf("abdalla");
       // Switch to chosen process.  It is the process's job
       // to release its lock and then reacquire it
       // before jumping back to us.
       decay = (p->priority == 1) ? 1 : (p->priority == 2) ? 3 : (p->priority == 3) ? 5 : (p->priority == 4) ? 7 : (p->priority == 5) ? 25:0;
-      printf("%d decay",decay);
       temp = (p->rutime * decay) / (p->rutime + p->stime);
       if (ratio == -1 || ratio > temp)
       {
