@@ -589,7 +589,6 @@ int wait(uint64 addr)
 //    via swtch back to the scheduler.
 void scheduler(void)
 {
-  struct proc *p;
   struct cpu *c = mycpu();
 
   c->proc = 0;
@@ -598,6 +597,7 @@ void scheduler(void)
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
 #ifdef DEFUALT
+  struct proc *p;
     for (p = proc; p < &proc[NPROC]; p++)
     {
       acquire(&p->lock);
@@ -646,20 +646,22 @@ void schedulerSRT()
         minProc = p;
       }
     }
-    release(&p->lock);
   }
+  acquire(&minProc->lock);
   minProc->state=RUNNING ;
   c->proc = minProc;
   minProc-> timeStart = ticks ;
   swtch(&c->context, &minProc->context);
-
   // Process is done running for now.
   // It should have changed its p->state before coming back.
   c->proc = 0;
+  release(&minProc->lock);
+
 }
 
 void schedulerCFSD()
 {
+  printf("hello world ") ;
   struct proc *p;
   struct proc *minProc = proc ;
   int decay;
@@ -673,11 +675,12 @@ void schedulerCFSD()
     acquire(&p->lock);
     if (p->state == RUNNABLE)
     {
+      printf("abdalla");
       // Switch to chosen process.  It is the process's job
       // to release its lock and then reacquire it
       // before jumping back to us.
       decay = (p->priority == 1) ? 1 : (p->priority == 2) ? 3 : (p->priority == 3) ? 5 : (p->priority == 4) ? 7 : (p->priority == 5) ? 25:0;
-
+      printf("%d decay",decay);
       temp = (p->rutime * decay) / (p->rutime + p->stime);
       if (ratio == -1 || ratio > temp)
       {
@@ -685,15 +688,15 @@ void schedulerCFSD()
         ratio = temp;
       }
     }
-    release(&p->lock);
   }
-
+  acquire(&minProc->lock);
   c->proc = minProc;
   minProc->state = RUNNING;
   swtch(&c->context, &minProc->context);
   // Process is done running for now.
   // It should have changed its p->state before coming back.
   c->proc = 0;
+  release(&minProc->lock);
 }
 
 // Switch to scheduler.  Must hold only p->lock
